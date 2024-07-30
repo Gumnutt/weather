@@ -1,0 +1,162 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+import { processWeatherData } from '../utils/weather';
+
+const weatherData = await processWeatherData();
+
+const temperaturesMax = weatherData.daily.temperatureMax;
+const temperaturesMin = weatherData.daily.temperatureMin;
+const averageTemperature = weatherData.daily.temperatureMax.map((temp, index) => (temp + weatherData.daily.temperatureMin[index]) / 2);
+const dates = weatherData.daily.time.map(date => date.toLocaleDateString('en-US', { weekday: 'short' }));
+---
+
+<Layout title="Welcome to Astro.">
+	<div class="weather-widget">
+		<div class="current-weather">
+			<h2>Today</h2>
+			<div class="weather-icon">
+				<!-- Add icon representation based on weatherCode -->
+			</div>
+			<div class="temperature">
+				<span>{weatherData.current.temperature}°</span> / <span>{weatherData.current.apparentTemperature}°</span>
+			</div>
+			<div class="description">
+				{weatherData.current.weatherCode}
+			</div>
+		</div>
+		<div class="forecast">
+			<h2>14-Day Forecast</h2>
+			<canvas id="forecastCanvas" class="trendline" width="760" height="160" data-temperatures-max={temperaturesMax} data-temperatures-min={temperaturesMin} data-temperatures-average={averageTemperature}></canvas>
+			<div class="forecast-details">
+				{dates.map((date, index) => (
+					<div class="forecast-day">
+						<span>{date}</span>
+						<span>{temperaturesMax[index]}°/{temperaturesMin[index]}°</span>
+					</div>
+				))}
+			</div>
+		</div>
+	</div>
+</Layout>
+
+<style>
+	.weather-widget {
+		display: flex;
+		flex-direction: column;
+		padding: 20px;
+		background-color: #f5f5f5;
+		border-radius: 10px;
+		width: 700px;
+		margin: 0 auto;
+	}
+
+	.current-weather, .forecast {
+		text-align: center;
+	}
+
+	.current-weather h2, .forecast h2 {
+		margin-bottom: 10px;
+	}
+
+	.weather-icon {
+		font-size: 50px;
+	}
+
+	.temperature {
+		font-size: 24px;
+	}
+
+	.description {
+		font-size: 18px;
+		color: #666;
+	}
+
+	.forecast-details {
+		display: flex;
+		justify-content: space-between;
+		margin-top: 10px;
+	}
+
+	.forecast-day {
+		text-align: center;
+		position: relative;
+		flex: 1;
+	}
+
+	.trendline {
+		display: block;
+		width: 100%;
+		height: 100%;
+	}
+</style>
+
+
+<script is:inline>
+	function drawTrendlines() {
+		const canvas = document.getElementById('forecastCanvas');
+		const ctx = canvas.getContext('2d');
+
+		const temperaturesMax = [...canvas.dataset.temperaturesMax.split(',').map(Number)];
+		const temperaturesMin = [...canvas.dataset.temperaturesMin.split(',').map(Number)];
+		const temperaturesAverage = [...canvas.dataset.temperaturesAverage.split(',').map(Number)];
+
+		const overallMinTemp = Math.min(...temperaturesMin);
+		const overallMaxTemp = Math.max(...temperaturesMax);
+		const rangeTemp = overallMaxTemp - overallMinTemp;
+
+		const width = canvas.width;
+		const height = canvas.height;
+		const padding = 20; // Padding from top and bottom
+		const graphHeight = height - 2 * padding;
+		const graphWidth = width;
+		const scaleX = graphWidth / (temperaturesMax.length - 1);
+		const scaleY = graphHeight / rangeTemp;
+
+		ctx.clearRect(0, 0, width, height);
+
+		function drawSmoothLine(data, color, isDotted = false, isMarker = false) {
+			ctx.beginPath();
+			ctx.strokeStyle = color;
+			ctx.lineWidth = 2;
+			if (isDotted) {
+				ctx.setLineDash([5, 5]); // Create dotted line
+			} else {
+				ctx.setLineDash([]); // Create solid line
+			}
+
+			for (let i = 0; i < data.length; i++) {
+				const x = i * scaleX;
+				const y = height - padding - (data[i] - overallMinTemp) * scaleY;
+
+				if (i === 0) {
+					ctx.moveTo(x, y);
+				} else {
+					const prevX = (i - 1) * scaleX;
+					const prevY = height - padding - (data[i - 1] - overallMinTemp) * scaleY;
+					const ctrlX1 = prevX + (x - prevX) / 2;
+					const ctrlY1 = prevY;
+					const ctrlX2 = x - (x - prevX) / 2;
+					const ctrlY2 = y;
+					ctx.bezierCurveTo(ctrlX1, ctrlY1, ctrlX2, ctrlY2, x, y);
+				}
+
+				if (isMarker) {
+					ctx.fillStyle = color;
+					ctx.beginPath();
+					ctx.arc(x, y, 4, 0, 2 * Math.PI); // Draw round dot
+					ctx.fill();
+				}
+			}
+
+			ctx.stroke();
+		}
+
+		drawSmoothLine(temperaturesMax, '#dddddd', false, false);
+		drawSmoothLine(temperaturesMin, '#dddddd', false, false);
+		drawSmoothLine(temperaturesAverage, '#202020', true, false);
+		drawSmoothLine(temperaturesAverage, '#202020', false, true);
+	}
+
+document.addEventListener('DOMContentLoaded', drawTrendlines);
+</script>

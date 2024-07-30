@@ -1,0 +1,156 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+import { processWeatherData } from '../utils/weather';
+
+const weatherData = await processWeatherData();
+
+const temperaturesMax = weatherData.daily.temperatureMax;
+const temperaturesMin = weatherData.daily.temperatureMin;
+const averageTemperature = weatherData.daily.temperatureMax.map((temp, index) => (temp + weatherData.daily.temperatureMin[index]) / 2);
+const dates = weatherData.daily.time.map(date => date.toLocaleDateString('en-US', { weekday: 'short' }));
+
+console.log(averageTemperature);
+---
+
+<Layout title="Weather Widget">
+	<div class="weather-widget">
+		<div class="today">
+			<h2>Today</h2>
+			<!-- <div class="weather-icon">
+				<img src={weatherData.current.iconUrl} alt={weatherData.current.weatherCode} />
+			</div> -->
+			<div class="temperature">
+				<span class="temp-high">{weatherData.current.temperature}°</span> / <span class="temp-low">{weatherData.current.apparentTemperature}°</span>
+			</div>
+			<div class="description">{weatherData.current.weatherCode}</div>
+		</div>
+		<div class="forecast">
+			<h2>Hourly Forecast</h2>
+			<div class="forecast-details" data-temperatures={JSON.stringify(weatherData.hourly.temperature)}>
+				{weatherData.hourly.time.map((timestamp, index) => (
+					<div class="forecast-hour" key={index}>
+						<div class="time">{new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+						{/* <div class="icon">
+							<img src={weatherData.hourly.iconUrls[index]} alt={weatherData.hourly.weatherDescriptions[index]} />
+						</div> */}
+						<div class="temp">{weatherData.hourly.temperature[index]}°</div>
+						<canvas class="trendline" width="180" height="60" data-temp={weatherData.hourly.temperature[index]}></canvas>
+					</div>
+				))}
+			</div>
+		</div>
+	</div>
+</Layout>
+
+<style>
+.weather-widget {
+	display: flex;
+	flex-direction: column;
+	background-color: #f5f5f5;
+	border-radius: 10px;
+	overflow: hidden;
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  width: 700px;
+		margin: 0 auto;
+}
+
+.today, .forecast {
+	padding: 20px;
+}
+
+.today {
+	text-align: center;
+	border-bottom: 1px solid #e5e5e5;
+}
+
+.weather-icon img {
+	width: 50px;
+	height: 50px;
+}
+
+.temperature {
+	font-size: 24px;
+	margin: 10px 0;
+}
+
+.description {
+	font-size: 18px;
+	color: #666;
+}
+
+.forecast h2 {
+	margin-bottom: 10px;
+}
+
+.forecast-details {
+	display: flex;
+	overflow-x: auto;
+	padding-top: 10px;
+}
+
+.forecast-hour {
+	text-align: center;
+  width:180px;
+  flex-shrink: 0;
+}
+
+.forecast-hour .time {
+	font-size: 12px;
+	color: #999;
+}
+
+.forecast-hour .icon img {
+	width: 30px;
+	height: 30px;
+}
+
+.trendline {
+	display: block;
+  width: 100%;
+}
+</style>
+
+
+<script is:inline>
+	function drawTrendlines() {
+    const canvases = document.querySelectorAll('.trendline');
+    const forecastDetails = document.querySelector('.forecast-details');
+    const temperatures = JSON.parse(forecastDetails.dataset.temperatures);
+
+    const overallMinTemp = Math.min(...Object.values(temperatures));
+    const overallMaxTemp = Math.max(...Object.values(temperatures));
+    const rangeTemp = overallMaxTemp - overallMinTemp;
+
+    canvases.forEach((canvas, index) => {
+      const ctx = canvas.getContext('2d');
+      const temperature = temperatures[index];
+      const height = canvas.height;
+      const scaleY = height / rangeTemp;
+
+      ctx.clearRect(0, 0, canvas.width, height);
+
+      const y = height - (temperature - overallMinTemp) * scaleY;
+
+      if (index === 0) {
+        ctx.moveTo(0, y);
+      } else {
+
+        const prevCanvas = canvases[index - 1];
+        const prevCtx = prevCanvas.getContext('2d');
+        const prevTemp = temperatures[index - 1];
+        const prevY = height - (prevTemp - overallMinTemp) * scaleY;
+        ctx.moveTo(0, prevY);
+        ctx.bezierCurveTo(canvas.width / 2, prevY, canvas.width / 2, y, canvas.width, y);
+      }
+      ctx.lineTo(canvas.width, y);
+      ctx.strokeStyle = '#202020';
+      ctx.lineWidth = 2;
+      // ctx.setLineDash([20, 3, 3, 3, 3, 3, 3, 3]);
+      // ctx.lineCap = 'round';
+      ctx.stroke();
+    });
+  }
+
+document.addEventListener('DOMContentLoaded', drawTrendlines);
+</script>
